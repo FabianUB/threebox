@@ -14,7 +14,15 @@ class BuildingShadows {
 		this.map = map;
 		// find layer source
 		const sourceName = this.map.getLayer(this.buildingsLayerId).source;
-		this.source = (this.map.style.sourceCaches || this.map.style._otherSourceCaches)[sourceName];
+		const style = this.map.style;
+		if (style && typeof style.getOwnSourceCaches === 'function') {
+			const caches = style.getOwnSourceCaches(sourceName);
+			this.source = Array.isArray(caches) ? caches[0] : null;
+		}
+		if (!this.source) {
+			const legacyCaches = style && (style.sourceCaches || style._otherSourceCaches);
+			this.source = legacyCaches ? legacyCaches[sourceName] : null;
+		}
 		if (!this.source) {
 			console.warn(`Can't find layer ${this.buildingsLayerId}'s source.`);
 		}

@@ -5,6 +5,7 @@
 const THREE = require("../three.js");
 const utils = require("../utils/utils.js");
 const ThreeboxConstants = require("../utils/constants.js");
+const mapboxCompat = require("../utils/mapbox-compat.js");
 
 function CameraSync(map, camera, world) {
     //    console.log("CameraSync constructor");
@@ -20,10 +21,11 @@ function CameraSync(map, camera, world) {
     this.world.matrixAutoUpdate = false;
 
     // set up basic camera state
+    const initialTransform = mapboxCompat.getTransform(this.map);
     this.state = {
         translateCenter: new THREE.Matrix4().makeTranslation(ThreeboxConstants.WORLD_SIZE / 2, -ThreeboxConstants.WORLD_SIZE / 2, 0),
         worldSizeRatio: ThreeboxConstants.TILE_SIZE / ThreeboxConstants.WORLD_SIZE,
-        worldSize: ThreeboxConstants.TILE_SIZE * this.map.transform.scale
+        worldSize: ThreeboxConstants.TILE_SIZE * mapboxCompat.getScale(initialTransform)
     };
 
     // Listen for move events from the map and update the Three.js camera
@@ -41,11 +43,13 @@ function CameraSync(map, camera, world) {
 
 CameraSync.prototype = {
     setupCamera: function () {
-        const t = this.map.transform;
+        const t = mapboxCompat.getTransform(this.map);
+        if (!t) return;
         this.camera.aspect = t.width / t.height; //bug fixed, if aspect is not reset raycast will fail on map resize
-        this.halfFov = t._fov / 2;
+        const fov = mapboxCompat.getFov(t);
+        this.halfFov = fov / 2;
         this.cameraToCenterDistance = 0.5 / Math.tan(this.halfFov) * t.height;
-        const maxPitch = t._maxPitch * Math.PI / 180;
+        const maxPitch = mapboxCompat.getMaxPitch(this.map, t);
         this.acuteAngle = Math.PI / 2 - maxPitch;
         this.updateCamera();
     },
@@ -56,14 +60,18 @@ CameraSync.prototype = {
             return;
         }
 
-        const t = this.map.transform;
+        const t = mapboxCompat.getTransform(this.map);
+        if (!t) return;
         this.camera.aspect = t.width / t.height; //bug fixed, if aspect is not reset raycast will fail on map resize
-        const offset = t.centerOffset || new THREE.Vector3(); //{ x: t.width / 2, y: t.height / 2 };
+        const centerOffset = mapboxCompat.getCenterOffset(t);
+        const offset = new THREE.Vector3(centerOffset.x, centerOffset.y, 0);
         let farZ = 0;
         let furthestDistance = 0;
-        this.halfFov = t._fov / 2;
-        const groundAngle = Math.PI / 2 + t._pitch;
-        const pitchAngle = Math.cos((Math.PI / 2) - t._pitch); //pitch seems to influence heavily the depth calculation and cannot be more than 60 = PI/3 < v1 and 85 > v2
+        const fov = mapboxCompat.getFov(t);
+        this.halfFov = fov / 2;
+        const pitch = mapboxCompat.getPitch(this.map, t);
+        const groundAngle = Math.PI / 2 + pitch;
+        const pitchAngle = Math.cos((Math.PI / 2) - pitch); //pitch seems to influence heavily the depth calculation and cannot be more than 60 = PI/3 < v1 and 85 > v2
         this.cameraToCenterDistance = 0.5 / Math.tan(this.halfFov) * t.height;
         let pixelsPerMeter = 1;
         const worldSize = this.worldSize();
@@ -71,19 +79,21 @@ CameraSync.prototype = {
         if (this.map.tb.mapboxVersion >= 2.0) {
             // mapbox version >= 2.0
             pixelsPerMeter = this.mercatorZfromAltitude(1, t.center.lat) * worldSize;
-            const fovAboveCenter = t._fov * (0.5 + t.centerOffset.y / t.height);
+            const fovAboveCenter = fov * (0.5 + centerOffset.y / t.height);
 
             // Adjust distance to MSL by the minimum possible elevation visible on screen,
             // this way the far plane is pushed further in the case of negative elevation.
             const minElevationInPixels = t.elevation ? t.elevation.getMinElevationBelowMSL() * pixelsPerMeter : 0;
-            const cameraToSeaLevelDistance = ((t._camera.position[2] * worldSize) - minElevationInPixels) / Math.cos(t._pitch);
+            const camera = mapboxCompat.getCamera(this.map, t);
+            const cameraZ = camera ? camera.position[2] : this.camera.position.z || 0;
+            const cameraToSeaLevelDistance = ((cameraZ * worldSize) - minElevationInPixels) / Math.cos(pitch);
             const topHalfSurfaceDistance = Math.sin(fovAboveCenter) * cameraToSeaLevelDistance / Math.sin(utils.clamp(Math.PI - groundAngle - fovAboveCenter, 0.01, Math.PI - 0.01));
 
             // Calculate z distance of the farthest fragment that should be rendered.
             furthestDistance = pitchAngle * topHalfSurfaceDistance + cameraToSeaLevelDistance;
 
             // Add a bit extra to avoid precision problems when a fragment's distance is exactly `furthestDistance`
-            const horizonDistance = cameraToSeaLevelDistance * (1 / t._horizonShift);
+            const horizonDistance = cameraToSeaLevelDistance * (1 / mapboxCompat.getHorizonShift(t));
             farZ = Math.min(furthestDistance * 1.01, horizonDistance);
         } else {
             // mapbox version < 2.0 or azure maps
@@ -108,20 +118,21 @@ CameraSync.prototype = {
         if (this.camera instanceof THREE.OrthographicCamera) {
             this.camera.projectionMatrix = utils.makeOrthographicMatrix(w / - 2, w / 2, h / 2, h / - 2, nearZ, farZ);
         } else {
-            this.camera.projectionMatrix = utils.makePerspectiveMatrix(t._fov, w / h, nearZ, farZ);
+            this.camera.projectionMatrix = utils.makePerspectiveMatrix(fov, w / h, nearZ, farZ);
         }
         this.camera.projectionMatrix.elements[8] = -offset.x * 2 / t.width;
         this.camera.projectionMatrix.elements[9] = offset.y * 2 / t.height;
 
         // Unlike the Mapbox GL JS camera, separate camera translation and rotation out into its world matrix
         // If this is applied directly to the projection matrix, it will work OK but break raycasting
-        let cameraWorldMatrix = this.calcCameraMatrix(t._pitch, t.angle);
-        // When terrain layers are included, height of 3D layers must be modified from t_camera.z * worldSize
-        if (t.elevation) cameraWorldMatrix.elements[14] = t._camera.position[2] * worldSize;
+        let cameraWorldMatrix = this.calcCameraMatrix(pitch, t.angle);
+        // When terrain layers are included, height of 3D layers must be modified from camera.z * worldSize
+        const camera = mapboxCompat.getCamera(this.map, t);
+        if (t.elevation && camera) cameraWorldMatrix.elements[14] = camera.position[2] * worldSize;
         //this.camera.matrixWorld.elements is equivalent to t._camera._transform
         this.camera.matrixWorld.copy(cameraWorldMatrix);
         
-        let zoomPow = t.scale * this.state.worldSizeRatio;
+        let zoomPow = mapboxCompat.getScale(t) * this.state.worldSizeRatio;
         // Handle scaling and translation of objects in the map in the world's matrix transform, not the camera
         let scale = new THREE.Matrix4;
         let translateMap = new THREE.Matrix4;
@@ -129,8 +140,9 @@ CameraSync.prototype = {
 
         scale.makeScale(zoomPow, zoomPow, zoomPow);
 
-        let x = t.x || t.point.x;
-        let y = t.y || t.point.y;
+        const translation = mapboxCompat.getTranslation(t);
+        let x = translation.x;
+        let y = translation.y;
         translateMap.makeTranslation(-x, y, 0);
         rotateMap.makeRotationZ(Math.PI);
 
@@ -141,17 +153,19 @@ CameraSync.prototype = {
             .premultiply(translateMap)
 
         // utils.prettyPrintMatrix(this.camera.projectionMatrix.elements);
-        this.map.fire('CameraSynced', { detail: { nearZ: nearZ, farZ: farZ, pitch: t._pitch, angle: t.angle, furthestDistance: furthestDistance, cameraToCenterDistance: this.cameraToCenterDistance, t: this.map.transform, tbProjMatrix: this.camera.projectionMatrix.elements, tbWorldMatrix: this.world.matrix.elements, cameraSyn: CameraSync } });
+        this.map.fire('CameraSynced', { detail: { nearZ: nearZ, farZ: farZ, pitch: pitch, angle: t.angle, furthestDistance: furthestDistance, cameraToCenterDistance: this.cameraToCenterDistance, t: this.map.transform, tbProjMatrix: this.camera.projectionMatrix.elements, tbWorldMatrix: this.world.matrix.elements, cameraSyn: CameraSync } });
 
     },
 
     worldSize() {
-        let t = this.map.transform;
-        return t.tileSize * t.scale;
+        const t = mapboxCompat.getTransform(this.map);
+        if (!t) return ThreeboxConstants.TILE_SIZE;
+        return t.tileSize * mapboxCompat.getScale(t);
     },
 
     worldSizeFromZoom() {
-        let t = this.map.transform;
+        const t = mapboxCompat.getTransform(this.map);
+        if (!t) return ThreeboxConstants.TILE_SIZE;
         return Math.pow(2.0, t.zoom) * t.tileSize;
     },
 
@@ -169,7 +183,7 @@ CameraSync.prototype = {
 
     calcCameraMatrix(pitch, angle, trz) {
         const t = this.map.transform;
-        const _pitch = (pitch === undefined) ? t._pitch : pitch;
+        const _pitch = (pitch === undefined) ? mapboxCompat.getPitch(this.map, t) : pitch;
         const _angle = (angle === undefined) ? t.angle : angle;
         const _trz = (trz === undefined) ? this.cameraTranslateZ : trz;
 
@@ -180,27 +194,32 @@ CameraSync.prototype = {
     },
 
     updateCameraState() {
-        let t = this.map.transform;
-        if (!t.height) return;
+        const t = mapboxCompat.getTransform(this.map);
+        if (!t || !t.height) return;
 
         // Set camera orientation and move it to a proper distance from the map
         //t._camera.setPitchBearing(t._pitch, t.angle);
 
-        const dir = t._camera.forward();
-        const distance = t.cameraToCenterDistance;
-        const center = t.point;
+        const camera = mapboxCompat.getCamera(this.map, t);
+        if (!camera || typeof camera.forward !== 'function') return;
+        const dir = camera.forward();
+        const distance = mapboxCompat.getCameraToCenterDistance(t) || t.cameraToCenterDistance || 0;
+        if (!distance) return;
+        const center = mapboxCompat.getPoint(t);
 
         // Use camera zoom (if terrain is enabled) to maintain constant altitude to sea level
-        const zoom = t._cameraZoom ? t._cameraZoom : t._zoom;
+        const zoom = mapboxCompat.getCameraZoom(this.map, t);
         const altitude = this.mercatorZfromZoom(t);
-        const height = altitude - this.mercatorZfromAltitude(t._centerAltitude, t.center.lat);
+        const centerAltitude = mapboxCompat.getCenterAltitude(t);
+        const centerLatLng = mapboxCompat.getCenter(t);
+        const height = altitude - this.mercatorZfromAltitude(centerAltitude, centerLatLng.lat);
 
         // simplified version of: this._worldSizeFromZoom(this._zoomFromMercatorZ(height))
-        const updatedWorldSize = t.cameraToCenterDistance / height;
+        const updatedWorldSize = distance / height;
         return [
             center.x / this.worldSize() - (dir[0] * distance) / updatedWorldSize,
             center.y / this.worldSize() - (dir[1] * distance) / updatedWorldSize,
-            this.mercatorZfromAltitude(t._centerAltitude, t._center.lat) + (-dir[2] * distance) / updatedWorldSize
+            this.mercatorZfromAltitude(centerAltitude, centerLatLng.lat) + (-dir[2] * distance) / updatedWorldSize
         ];
 
     },
@@ -213,13 +232,15 @@ CameraSync.prototype = {
 
         // worldToCamera: flip * cam^-1 * zScale
         // cameraToWorld: (flip * cam^-1 * zScale)^-1 => (zScale^-1 * cam * flip^-1)
-        let t = this.map.transform;
+        const t = mapboxCompat.getTransform(this.map);
+        const camera = mapboxCompat.getCamera(this.map, t);
+        const orientation = mapboxCompat.getCameraOrientation(this.map, t);
         const matrix = new THREE.Matrix4();
         const matrixT = new THREE.Matrix4();
 
         // Compute inverse of camera matrix and post-multiply negated translation
-        const o = t._camera._orientation;
-        const p = t._camera.position;
+        const o = orientation;
+        const p = camera ? camera.position : [0, 0, 0];
         const invPosition = new THREE.Vector3(p[0], p[1], p[2]);
 
         const quat = new THREE.Quaternion();

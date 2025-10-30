@@ -2,18 +2,39 @@
  * @author peterqliu / https://github.com/peterqliu
  * @author jscastro / https://github.com/jscastro76
  */
+const THREE = require("../three.js");
 const utils = require("../utils/utils.js");
 const Objects = require('./objects.js');
-const OBJLoader = require("./loaders/OBJLoader.js");
-const MTLLoader = require("./loaders/MTLLoader.js");
-const FBXLoader = require("./loaders/FBXLoader.js");
-const GLTFLoader = require("./loaders/GLTFLoader.js");
-const ColladaLoader = require("./loaders/ColladaLoader.js");
+const { OBJLoader } = require("three/examples/jsm/loaders/OBJLoader.js");
+const { MTLLoader } = require("three/examples/jsm/loaders/MTLLoader.js");
+const { FBXLoader } = require("three/examples/jsm/loaders/FBXLoader.js");
+const { GLTFLoader } = require("three/examples/jsm/loaders/GLTFLoader.js");
+const { ColladaLoader } = require("three/examples/jsm/loaders/ColladaLoader.js");
 const objLoader = new OBJLoader();
 const materialLoader = new MTLLoader();
 const gltfLoader = new GLTFLoader();
 const fbxLoader = new FBXLoader();
 const daeLoader = new ColladaLoader();
+
+function applyCredentials(loader, flag) {
+	if (!loader) return;
+	const withCredentials = !!flag;
+	if (typeof loader.setWithCredentials === 'function') {
+		loader.setWithCredentials(withCredentials);
+	}
+	if (typeof loader.setCrossOrigin === 'function') {
+		loader.setCrossOrigin(withCredentials ? 'use-credentials' : 'anonymous');
+	}
+	else if ('crossOrigin' in loader) {
+		loader.crossOrigin = withCredentials ? 'use-credentials' : 'anonymous';
+	}
+	else {
+		loader.withCredentials = withCredentials;
+	}
+	if (loader.manager && typeof loader.manager.setCrossOrigin === 'function') {
+		loader.manager.setCrossOrigin(withCredentials ? 'use-credentials' : 'anonymous');
+	}
+}
 
 function loadObj(options, cb, promise) {
 
@@ -41,10 +62,15 @@ function loadObj(options, cb, promise) {
 			break;
 	}
 
-	materialLoader.withCredentials = options.withCredentials;
-	materialLoader.load(options.mtl, loadObject, () => (null), error => {
-		console.warn("No material file found " + error.stack);
-	});
+	if (options.type === "mtl" && options.mtl) {
+		applyCredentials(materialLoader, options.withCredentials);
+		materialLoader.load(options.mtl, loadObject, () => (null), error => {
+			console.warn("No material file found " + error.stack);
+			loadObject();
+		});
+	} else {
+		loadObject();
+	}
 
 	function loadObject(materials) {
 
@@ -53,7 +79,7 @@ function loadObj(options, cb, promise) {
 			loader.setMaterials(materials);
 		}
 
-		loader.withCredentials = options.withCredentials;
+		applyCredentials(loader, options.withCredentials);
 		loader.load(options.obj, obj => {
 
 			//[jscastro] MTL/GLTF/FBX models have a different structure

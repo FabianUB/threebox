@@ -21,6 +21,7 @@ export default defineConfig({
         alias({
             entries: [
                 {find: 'three', replacement: isLegacy ? 'three-legacy' : 'three-modern'},
+                {find: 'three/examples/jsm/', replacement: isLegacy ? 'three-legacy/examples/jsm/' : 'three-modern/examples/jsm/'},
                 {find: 'mapbox-gl', replacement: isLegacy ? 'mapbox-gl-v2' : 'mapbox-gl-v3'}
             ]
         }),
