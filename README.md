@@ -168,7 +168,18 @@ For an specific version (i.e. v2.2.1) use the followin:
 
 #### Test the samples 
 Several introductory examples are [here](https://github.com/jscastro76/threebox/tree/master/examples).  
-To run them, create a `config.js` file with your Mapbox-gl-js access token, alongside and in the format of [the template](https://github.com/jscastro76/threebox/blob/master/examples/config_template.js).
+To run them, create a `config.js` file with your Mapbox-gl-js access token, alongside and in the format of [the template](https://github.com/jscastro76/threebox/blob/master/examples/config_template.js).  
+Build the flavour you want (`npm run build:legacy` for Mapbox GL JS 2.2 / Three r132, or `npm run build:modern` for Mapbox GL JS 3.16 / Three r180) and start the dev server with the matching target:
+```bash
+# legacy stack (default)
+npm run build:legacy
+TB_TARGET=legacy node server.js
+
+# modern stack
+npm run build:modern
+TB_TARGET=modern node server.js
+```
+Then open http://localhost:8080/examples/01-basic.html (or any other sample).
 
 <br>
 
@@ -176,24 +187,24 @@ To run them, create a `config.js` file with your Mapbox-gl-js access token, alon
 
 ## Contributing
 - Clone the [Github repo](https://github.com/jscastro76/threebox/).
-- Build the library with `npm run build` to get the minimized version, or `npm run dev` to get the development version and rebuild continuously as you develop. 
-- Both commands will output a bundle in [`dist/`](dist/) folder.
+- Build the legacy bundle with `npm run build:legacy`; generate the modern stack with `npm run build:modern`.
+- `npm run dev` watches and rebuilds continuously against the legacy target.
+- All bundles land in [`dist/`](dist/).
 
 #### Unit tests
 Tests live [here](/tests). 
-- Build first the test bundle with `npm run test`, this will create [`tests\threebox-tests-bundle.js`](tests/threebox-tests-bundle.js)  
+- Build first the desired test bundle with `npm run test:legacy` or `npm run test:modern`; this will create [`tests\threebox-tests-bundle.js`](tests/threebox-tests-bundle.js)  
 - Then in your preferred browser navigate to [`threebox-tests.html`](https://github.com/jscastro76/threebox/blob/master/tests/threebox-tests.html) and check the console for test results.
 
 #### How to build the project in Visual Studio
 Sample to get a full build from scratch for Visual Studio:
 - Install [Node.js](https://nodejs.org/en/) 
 - Clone the repo and open a new Project using main.js
-- Install / Update the packages browserify, tape, ncp, uglyfy, watchify.
+- Install project dependencies with `npm install`.
 - Right click on the project at the Solution Explorer > Open Node.js Interactive Window:
 - execute `.npm [ProjectName] init -y`
 - execute `.npm [ProjectName] install`
 - execute `.npm [ProjectName] i`
-- execute `.npm [ProjectName] run dev` or `.npm run build
-`
+- execute `.npm [ProjectName] run dev` or `.npm run build:legacy`
 
 

@@ -14,10 +14,13 @@
     },
     "homepage": "https://github.com/jscastro76/threebox#readme",
     "scripts": {
-        "build": "browserify -p tinyify exports.js > dist/threebox.min.js && ncp ./examples/css/threebox.css ./dist/threebox.css --stopOnErr",
-        "dev": "watchify exports.js --verbose -o dist/threebox.js ",
-        "all": "browserify -p tinyify exports.js > dist/threebox.min.js && watchify exports.js --verbose -o dist/threebox.js ",
-        "test": "browserify tests/threebox-tests.js > tests/threebox-tests-bundle.js",
+        "build": "npm run build:legacy",
+        "build:legacy": "rimraf dist && TB_TARGET=legacy rollup -c",
+        "build:modern": "rimraf dist && TB_TARGET=modern rollup -c",
+        "dev": "TB_TARGET=legacy rollup -c --watch",
+        "test": "npm run test:legacy",
+        "test:legacy": "rimraf tests/threebox-tests-bundle.js && TB_TARGET=legacy rollup -c rollup.tests.config.mjs",
+        "test:modern": "rimraf tests/threebox-tests-bundle.js && TB_TARGET=modern rollup -c rollup.tests.config.mjs",
         "start": "node server.js",
         "stop": "node server.stop.js"
     },
@@ -27,12 +30,22 @@
         "test": "tests"
     },
     "devDependencies": {
-        "browserify": "^17.0.0",
-        "ncp": "^2.0.0",
+        "@rollup/plugin-commonjs": "^25.0.7",
+        "@rollup/plugin-json": "^6.1.0",
+        "@rollup/plugin-node-resolve": "^15.3.0",
+        "@rollup/plugin-alias": "^5.1.0",
+        "rollup": "^4.44.2",
+        "rollup-plugin-copy": "^3.5.0",
+        "@rollup/plugin-terser": "^0.4.4",
+        "rollup-plugin-node-polyfills": "^0.2.1",
         "tape": "^5.1.1",
-        "tinyify": "^4.0.0",
-        "uglifyify": "^5.0.2",
-        "watchify": "^4.0.0"
+        "rimraf": "^5.0.5"
+    },
+    "dependencies": {
+        "mapbox-gl-v2": "npm:mapbox-gl@2.2.0",
+        "mapbox-gl-v3": "npm:mapbox-gl@3.16.0",
+        "three-legacy": "npm:three@0.132.2",
+        "three-modern": "npm:three@0.180.0"
     },
     "keywords": [
         "three.js",

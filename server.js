@@ -4,7 +4,19 @@ var url = require('url');
 var fs = require('fs');
 var path = require('path');
 var baseDirectory = __dirname; 
-var port = 8080 || process.env.PORT || 1337;
+var port = process.env.PORT || 8080;
+var target = process.env.TB_TARGET || 'legacy';
+var distRoot = path.join(__dirname, 'dist');
+var bundleFiles = {
+    legacy: {
+        script: 'threebox.js',
+        style: 'threebox.css'
+    },
+    modern: {
+        script: 'threebox.js',
+        style: 'threebox.css'
+    }
+};
 var counter = 0;
 
 http.createServer(function (request, response) {
@@ -42,6 +54,19 @@ http.createServer(function (request, response) {
 
         var isValidExt = validExtensions[ext];
 
+        if (requestUrl.pathname === '/threebox-target.js') {
+            var bundle = bundleFiles[target] || bundleFiles.legacy;
+            var content = `
+                window.__THREEBOX_TARGET__ = '${target}';
+                window.__THREEBOX_SCRIPT__ = '${bundle.script}';
+                window.__THREEBOX_STYLE__ = '${bundle.style}';
+            `;
+            response.setHeader("Content-Type", "application/javascript");
+            response.writeHead(200);
+            response.end(content);
+            return;
+        }
+
         var fileStream = fs.createReadStream(fsPath);
         fileStream.pipe(response);
         fileStream.on('open', function () {
@@ -58,5 +83,6 @@ http.createServer(function (request, response) {
         console.log(e.stack);
     }
 
-}).listen(port);
-
+}).listen(port, function(){
+    console.log(`Threebox examples dev server running on http://localhost:${port} (target=${target})`);
+});

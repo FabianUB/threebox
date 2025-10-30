@@ -1,11 +1,15 @@
 <!doctype html>
 <head>
+	<script src="/threebox-target.js"></script>
+	<script>
+		const __tbMapboxVersion = window.__THREEBOX_TARGET__ === 'modern' ? 'v3.16.0' : 'v2.2.0';
+		document.write('<link href="https://api.mapbox.com/mapbox-gl-js/' + __tbMapboxVersion + '/mapbox-gl.css" rel="stylesheet">');
+		document.write('<script src="https://api.mapbox.com/mapbox-gl-js/' + __tbMapboxVersion + '/mapbox-gl.js"></' + 'script>');
+		document.write('<script src="../dist/' + window.__THREEBOX_SCRIPT__ + '" type="text/javascript"></' + 'script>');
+		document.write('<link href="../dist/' + window.__THREEBOX_STYLE__ + '" rel="stylesheet" />');
+	</script>
 	<title>Line Example</title>
-	<script src="../dist/threebox.js" type="text/javascript"></script>
-	<link href="../dist/threebox.css" rel="stylesheet" />
 	<script src="config.js"></script>
-	<link href="https://api.mapbox.com/mapbox-gl-js/v2.2.0/mapbox-gl.css" rel="stylesheet">
-	<script src="https://api.mapbox.com/mapbox-gl-js/v2.2.0/mapbox-gl.js"></script>
 	<style>
 		body, html {
 			width: 100%;
